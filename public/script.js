@@ -197,13 +197,126 @@ function eliminarDelCarrito(id) {
   }
 }
 
-function finalizarCompra() {
+async function finalizarCompra() {
   cerrarCarrito();
-  showNotification('Procesando pedido...', 'info');
-  setTimeout(() => showNotification('¡Pedido confirmado! Recibirás un email.', 'success'), 2000);
-  cartItems = [];
-  cartCount = 0;
-  document.getElementById('cartCount').textContent = 0;
+
+  // Crear formulario de checkout
+  const checkoutHTML = `
+    <div id="checkoutModal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); display:flex; justify-content:center; align-items:center; z-index:10000; overflow-y:auto; padding:20px;">
+      <div style="background:white; border-radius:12px; max-width:600px; width:100%; max-height:90vh; overflow-y:auto; box-shadow:0 20px 40px rgba(0,0,0,0.1);">
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:20px; border-bottom:1px solid #e5e7eb;">
+          <h3 style="margin:0; color:#059669;"><i class="fas fa-credit-card"></i> Finalizar Compra</h3>
+          <button onclick="document.getElementById('checkoutModal').remove()" style="background:none; border:none; font-size:20px; cursor:pointer;">×</button>
+        </div>
+        <form id="checkoutForm" style="padding:20px;">
+          <div style="margin-bottom:25px;">
+            <h4 style="margin:0 0 15px 0; color:#374151; font-size:16px;">Información Personal</h4>
+            <input type="text" placeholder="Nombre completo" id="checkoutName" required style="width:100%; padding:12px; border:1px solid #d1d5db; border-radius:8px; margin-bottom:15px; box-sizing:border-box;">
+            <input type="email" placeholder="Correo electrónico" id="checkoutEmail" required style="width:100%; padding:12px; border:1px solid #d1d5db; border-radius:8px; margin-bottom:15px; box-sizing:border-box;">
+            <input type="tel" placeholder="Teléfono" id="checkoutPhone" required style="width:100%; padding:12px; border:1px solid #d1d5db; border-radius:8px; margin-bottom:15px; box-sizing:border-box;">
+            <input type="text" placeholder="Documento de identidad" id="checkoutDocument" required style="width:100%; padding:12px; border:1px solid #d1d5db; border-radius:8px; box-sizing:border-box;">
+          </div>
+
+          <div style="margin-bottom:25px;">
+            <h4 style="margin:0 0 15px 0; color:#374151; font-size:16px;">Dirección de Entrega</h4>
+            <input type="text" placeholder="Dirección completa" id="checkoutAddress" required style="width:100%; padding:12px; border:1px solid #d1d5db; border-radius:8px; margin-bottom:15px; box-sizing:border-box;">
+            <input type="text" placeholder="Ciudad" id="checkoutCity" required style="width:100%; padding:12px; border:1px solid #d1d5db; border-radius:8px; margin-bottom:15px; box-sizing:border-box;">
+            <input type="text" placeholder="Código postal" id="checkoutPostal" required style="width:100%; padding:12px; border:1px solid #d1d5db; border-radius:8px; box-sizing:border-box;">
+          </div>
+
+          <div style="margin-bottom:25px;">
+            <h4 style="margin:0 0 15px 0; color:#374151; font-size:16px;">Método de Pago</h4>
+            <label style="display:flex; align-items:center; gap:10px; padding:12px; border:1px solid #d1d5db; border-radius:8px; margin-bottom:10px; cursor:pointer;">
+              <input type="radio" name="payment" value="card" checked required>
+              <span><i class="fas fa-credit-card"></i> Tarjeta de Crédito/Débito</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:10px; padding:12px; border:1px solid #d1d5db; border-radius:8px; margin-bottom:10px; cursor:pointer;">
+              <input type="radio" name="payment" value="pse" required>
+              <span><i class="fas fa-university"></i> PSE</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:10px; padding:12px; border:1px solid #d1d5db; border-radius:8px; cursor:pointer;">
+              <input type="radio" name="payment" value="cash" required>
+              <span><i class="fas fa-money-bill"></i> Pago Contraentrega</span>
+            </label>
+          </div>
+
+          <div style="background:#f9fafb; padding:20px; border-radius:8px; margin:20px 0;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+              <span>Subtotal:</span>
+              <span id="subtotal">$0</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+              <span>Envío:</span>
+              <span>$15.000</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-weight:700; font-size:18px; color:#059669; border-top:1px solid #d1d5db; padding-top:10px; margin-top:15px;">
+              <span>Total:</span>
+              <span id="totalAmount">$0</span>
+            </div>
+          </div>
+
+          <button type="submit" style="width:100%; padding:15px; background:#059669; color:white; border:none; border-radius:8px; font-weight:600; cursor:pointer; font-size:16px;">
+            <i class="fas fa-lock"></i> Confirmar Pedido
+          </button>
+        </form>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', checkoutHTML);
+
+  // Calcular totales
+  const subtotal = cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  const total = subtotal + 15000;
+  document.getElementById('subtotal').textContent = '$' + subtotal.toLocaleString('es-CO');
+  document.getElementById('totalAmount').textContent = '$' + total.toLocaleString('es-CO');
+
+  // Manejar envío del formulario
+  document.getElementById('checkoutForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const orderData = {
+      name: document.getElementById('checkoutName').value,
+      email: document.getElementById('checkoutEmail').value,
+      phone: document.getElementById('checkoutPhone').value,
+      document: document.getElementById('checkoutDocument').value,
+      address: document.getElementById('checkoutAddress').value,
+      city: document.getElementById('checkoutCity').value,
+      postal_code: document.getElementById('checkoutPostal').value,
+      payment_method: document.querySelector('input[name="payment"]:checked').value,
+      items: cartItems.map(item => ({
+        id: item.id,
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price
+      }))
+    };
+
+    document.getElementById('checkoutModal').remove();
+    showNotification('Procesando pedido...', 'info');
+
+    try {
+      const response = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(orderData)
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        showNotification(`¡Pedido #${result.order_id} confirmado! Recibirás un email de confirmación.`, 'success');
+        cartItems = [];
+        cartCount = 0;
+        document.getElementById('cartCount').textContent = 0;
+      } else {
+        showNotification('Error: ' + result.error, 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showNotification('Error al procesar el pedido: ' + err.message, 'error');
+    }
+  });
 }
 
 // ─── Newsletter ──────────────────────────────────────────────
